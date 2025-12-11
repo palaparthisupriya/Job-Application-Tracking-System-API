@@ -1,0 +1,24 @@
++----------------+       +----------------+       +-----------------+
+|    Companies   | 1   ∞ |      Jobs      | 1   ∞ |   Applications  |
++----------------+-------+----------------+-------+-----------------+
+| _id (PK)       |       | _id (PK)       |       | _id (PK)        |
+| name           |       | title          |       | candidate (FK)  |
+| createdAt      |       | description    |       | job (FK)        |
+| updatedAt      |       | companyId (FK) |       | stage           |
++----------------+       | status         |       | createdAt       |
+                         | createdAt      |       | updatedAt       |
+                         | updatedAt      |       +-----------------+
+                         +----------------+
+                                 |
+                                 | 1
+                                 | 
+                         +---------------------+
+                         | ApplicationHistory  |
+                         +---------------------+
+                         | _id (PK)            |
+                         | applicationId (FK)  |
+                         | changedBy (FK)      |
+                         | previousStage       |
+                         | newStage            |
+                         | changedAt           |
+                         +---------------------+
