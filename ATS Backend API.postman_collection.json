@@ -1,0 +1,266 @@
+{
+	"info": {
+		"_postman_id": "bcf8195b-bfd8-41cf-9bf1-01dc83128a53",
+		"name": "ATS Backend API",
+		"description": "Postman collection for testing ATS backend endpoints with proper role-based access.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "50689611",
+		"_collection_link": "https://saisupriyapalaparthi-5059574.postman.co/workspace/Supriya-Palaparthi's-Workspace~977b5753-6eac-4d88-8915-758ba2b50fc5/collection/50689611-bcf8195b-bfd8-41cf-9bf1-01dc83128a53?action=share&source=collection_link&creator=50689611"
+	},
+	"item": [
+		{
+			"name": "Auth",
+			"item": [
+				{
+					"name": "Register",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"password123\",\n  \"role\": \"candidate\",\n  \"companyId\": \"<COMPANY_ID>\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:5000/api/auth/register",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "5000",
+							"path": [
+								"api",
+								"auth",
+								"register"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"john@example.com\",\n  \"password\": \"password123\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:5000/api/auth/login",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "5000",
+							"path": [
+								"api",
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Jobs",
+			"item": [
+				{
+					"name": "Create Job",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer <RECRUITER_TOKEN>"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Backend Developer\",\n  \"description\": \"Node.js and Express developer\",\n  \"companyId\": \"<COMPANY_ID>\",\n  \"status\": \"open\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:5000/api/jobs",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "5000",
+							"path": [
+								"api",
+								"jobs"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Jobs",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:5000/api/jobs",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "5000",
+							"path": [
+								"api",
+								"jobs"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Applications",
+			"item": [
+				{
+					"name": "Submit Application",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer <CANDIDATE_TOKEN>"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"job\": \"<JOB_ID>\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:5000/api/applications/submit",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "5000",
+							"path": [
+								"api",
+								"applications",
+								"submit"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get My Applications",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer <CANDIDATE_TOKEN>"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:5000/api/applications/my",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "5000",
+							"path": [
+								"api",
+								"applications",
+								"my"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Change Application Stage",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer <RECRUITER_TOKEN>"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"newStage\": \"Screening\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:5000/api/applications/<APPLICATION_ID>/stage",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "5000",
+							"path": [
+								"api",
+								"applications",
+								"<APPLICATION_ID>",
+								"stage"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Admin",
+			"item": [
+				{
+					"name": "Get All Users",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer <ADMIN_TOKEN>"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:5000/api/admin/users",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "5000",
+							"path": [
+								"api",
+								"admin",
+								"users"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}
