@@ -1,10 +1,13 @@
+import mongoose from "mongoose";
 import Application from "../models/applicationmodel.js";
 import ApplicationHistory from "../models/applicationhistory.js";
 import Job from "../models/job.js";
 import User from "../models/user.js";
 import { addEmailJob } from "../workers/emailworker.js";
 
-// Valid stage transitions
+// ----------------------------------------------
+// Valid stage transitions (Finite State Machine)
+// ----------------------------------------------
 const validTransitions = {
   Applied: ["Screening", "Rejected"],
   Screening: ["Interview", "Rejected"],
@@ -23,39 +26,47 @@ export const submitApplication = async (req, res) => {
     const { jobId } = req.body;
     const candidateId = req.user._id;
 
-    // Get job
     const job = await Job.findById(jobId);
-    if (!job) return res.status(404).json({ message: "Job not found" });
+    if (!job) {
+      return res.status(404).json({ message: "Job not found" });
+    }
 
-    // Check if already applied
-    const already = await Application.findOne({ candidate: candidateId, job: jobId });
-    if (already) return res.status(400).json({ message: "Already applied" });
+    const alreadyApplied = await Application.findOne({
+      candidate: candidateId,
+      job: jobId,
+    });
 
-    // Create application
+    if (alreadyApplied) {
+      return res.status(400).json({ message: "Already applied to this job" });
+    }
+
     const application = await Application.create({
       candidate: candidateId,
       job: jobId,
       stage: "Applied",
     });
 
-    // Fetch recruiter for email
-    const recruiter = await User.findById(job.postedBy);
+    // Fetch users for email
     const candidate = await User.findById(candidateId);
+    const recruiter = await User.findById(job.postedBy);
 
-    // Send emails asynchronously
+    // Async email notifications
     await addEmailJob({
       to: candidate.email,
       subject: "Application Submitted",
-      text: `Your application for ${job.title} has been submitted.`,
+      text: `Your application for ${job.title} has been submitted successfully.`,
     });
 
     await addEmailJob({
       to: recruiter.email,
-      subject: "New Application Received",
-      text: `${candidate.name} has applied for your job posting "${job.title}".`,
+      subject: "New Job Application",
+      text: `${candidate.name} has applied for your job: ${job.title}`,
     });
 
-    res.status(201).json({ message: "Application submitted", application });
+    res.status(201).json({
+      message: "Application submitted successfully",
+      application,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -66,60 +77,84 @@ export const submitApplication = async (req, res) => {
 // @route PUT /api/applications/:id/stage
 // ----------------------------------------------
 export const changeApplicationStage = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const { id } = req.params;
     const { newStage } = req.body;
 
     const application = await Application.findById(id)
       .populate("candidate", "email name")
-      .populate("job", "title");
+      .populate("job", "title")
+      .session(session);
 
-    if (!application) return res.status(404).json({ message: "Application not found" });
+    if (!application) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ message: "Application not found" });
+    }
 
     const currentStage = application.stage;
 
-    // Validate transition
     if (!validTransitions[currentStage].includes(newStage)) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({
         message: `Invalid transition from ${currentStage} → ${newStage}`,
       });
     }
 
-    // Update stage
+    // 1️⃣ Update stage
     application.stage = newStage;
-    await application.save();
+    await application.save({ session });
 
-    // Save history
-    await ApplicationHistory.create({
-      application: id,
-      fromStage: currentStage,
-      toStage: newStage,
-      changedAt: new Date(),
-    });
+    // 2️⃣ Log history (atomic)
+    await ApplicationHistory.create(
+      [
+        {
+          application: id,
+          fromStage: currentStage,
+          toStage: newStage,
+          changedAt: new Date(),
+        },
+      ],
+      { session }
+    );
 
-    // Send update email
+    await session.commitTransaction();
+    session.endSession();
+
+    // 3️⃣ Send email AFTER transaction commit
     await addEmailJob({
       to: application.candidate.email,
       subject: "Application Status Updated",
-      text: `Your application for ${application.job.title} is now at stage: ${newStage}.`,
+      text: `Your application for ${application.job.title} is now in stage: ${newStage}.`,
     });
 
-    res.json({ message: "Stage updated", application });
+    res.json({
+      message: "Application stage updated successfully",
+      application,
+    });
   } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
     res.status(500).json({ message: error.message });
   }
 };
 
-// ----------------------------------------------------
+// ----------------------------------------------
 // @desc Get single application details
-// ----------------------------------------------------
+// ----------------------------------------------
 export const getApplicationDetail = async (req, res) => {
   try {
     const application = await Application.findById(req.params.id)
       .populate("candidate", "name email role")
       .populate("job", "title description companyId");
 
-    if (!application) return res.status(404).json({ message: "Application not found" });
+    if (!application) {
+      return res.status(404).json({ message: "Application not found" });
+    }
 
     res.json(application);
   } catch (error) {
@@ -127,16 +162,16 @@ export const getApplicationDetail = async (req, res) => {
   }
 };
 
-// ----------------------------------------------------
-// @desc Recruiter views all applications for a job
-// @route GET /api/applications/job/:jobId?stage=Interview
-// ----------------------------------------------------
+// ----------------------------------------------
+// @desc Recruiter views applications for a job
+// @route GET /api/applications/job/:jobId
+// ----------------------------------------------
 export const getApplicationsForJob = async (req, res) => {
   try {
     const { jobId } = req.params;
     const { stage } = req.query;
 
-    let filter = { job: jobId };
+    const filter = { job: jobId };
     if (stage) filter.stage = stage;
 
     const applications = await Application.find(filter)
@@ -149,9 +184,9 @@ export const getApplicationsForJob = async (req, res) => {
   }
 };
 
-// ----------------------------------------------------
-// @desc Candidate views their own applications
-// ----------------------------------------------------
+// ----------------------------------------------
+// @desc Candidate views own applications
+// ----------------------------------------------
 export const getMyApplications = async (req, res) => {
   try {
     const candidateId = req.user._id;
@@ -165,55 +200,61 @@ export const getMyApplications = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// ----------------------------------------------
+// @desc Get application history
+// ----------------------------------------------
 export const getApplicationHistory = async (req, res) => {
-    try {
-      const { id } = req.params;
-  
-      const history = await ApplicationHistory.find({ application: id })
-        .sort({ timestamp: 1 }); // oldest → newest
-  
-      if (!history.length) {
-        return res.status(404).json({ message: "No history found" });
-      }
-  
-      res.json(history);
-    } catch (error) {
-      res.status(500).json({ message: error.message });
+  try {
+    const { id } = req.params;
+
+    const history = await ApplicationHistory.find({ application: id })
+      .sort({ changedAt: 1 });
+
+    if (!history.length) {
+      return res.status(404).json({ message: "No history found" });
     }
-  };
-  // ⭐ CANDIDATE DASHBOARD SUMMARY
+
+    res.json(history);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ----------------------------------------------
+// @desc Candidate dashboard stats
+// ----------------------------------------------
 export const getCandidateStats = async (req, res) => {
-    try {
-      const candidateId = req.user._id;
-  
-      // 1. Total applications submitted
-      const totalApplications = await Application.countDocuments({ candidate: candidateId });
-  
-      // 2. Applications grouped by stage
-      const applicationsByStage = await Application.aggregate([
-        { $match: { candidate: candidateId } },
-        {
-          $group: {
-            _id: "$stage",
-            count: { $sum: 1 }
-          }
-        }
-      ]);
-  
-      // 3. Recent applications (latest 5)
-      const recentApplications = await Application.find({ candidate: candidateId })
-        .populate("job", "title companyId")
-        .sort({ createdAt: -1 })
-        .limit(5);
-  
-      res.json({
-        totalApplications,
-        applicationsByStage,
-        recentApplications
-      });
-  
-    } catch (error) {
-      res.status(500).json({ message: error.message });
-    }
-  };
-  
+  try {
+    const candidateId = req.user._id;
+
+    const totalApplications = await Application.countDocuments({
+      candidate: candidateId,
+    });
+
+    const applicationsByStage = await Application.aggregate([
+      { $match: { candidate: candidateId } },
+      {
+        $group: {
+          _id: "$stage",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const recentApplications = await Application.find({
+      candidate: candidateId,
+    })
+      .populate("job", "title companyId")
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+    res.json({
+      totalApplications,
+      applicationsByStage,
+      recentApplications,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
